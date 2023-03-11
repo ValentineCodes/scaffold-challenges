@@ -258,14 +258,14 @@ function App(props) {
 
   // ** TODO: The events are not showing up! Left most of it commented out, but can uncomment and play with! Pretty sure you need to go into DEX.jsx as that is where most of the UI Home-page is being derived from. 😵 📟 Listen for broadcast events
 
-  const EthToTokenSwapEvents = useEventListener(readContracts, "DEX", "EthToTokenSwap", localProvider, 1);
-  console.log("⟠ -->🎈 EthToTokenSwapEvents:", EthToTokenSwapEvents);
+  // const EthToTokenSwapEvents = useEventListener(readContracts, "DEX", "EthToTokenSwap", localProvider, 1);
+  // console.log("⟠ -->🎈 EthToTokenSwapEvents:", EthToTokenSwapEvents);
   // const TokenToEthSwapEvents = useEventListener(readContracts, "DEX", "TokenToEthSwap", 1);
-  // // console.log("🎈-->⟠ TokenToEthSwapEvents:", TokenToEthSwapEvents);
+  // console.log("🎈-->⟠ TokenToEthSwapEvents:", TokenToEthSwapEvents);
   // const LiquidityProvidedEvents = useEventListener(readContracts, "DEX", "LiquidityProvided", 1);
-  // // console.log("➕ LiquidityProvidedEvents:", LiquidityProvidedEvents);
+  // console.log("➕ LiquidityProvidedEvents:", LiquidityProvidedEvents);
   // const LiquidityRemovedEvents = useEventListener(readContracts, "DEX", "LiquidityRemoved", 1);
-  // // console.log("➖ LiquidityRemovedEvents:", LiquidityRemovedEvents);
+  // console.log("➖ LiquidityRemovedEvents:", LiquidityRemovedEvents);
 
   return (
     <div className="App">
@@ -376,7 +376,6 @@ function App(props) {
             startBlock={1}
           />
         </Route>
-        }
         <Route exact path="/debug">
           {/*
                 🎛 this scaffolding is full of commonly used components
