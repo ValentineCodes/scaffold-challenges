@@ -4,6 +4,8 @@ pragma solidity 0.8.4;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
+error Streamer__AlreadyFunded();
+
 contract Streamer is Ownable {
     event Opened(address, uint256);
     event Challenged(address);
@@ -14,14 +16,9 @@ contract Streamer is Ownable {
     mapping(address => uint256) canCloseAt;
 
     function fundChannel() public payable {
-        /*
-        Checkpoint 3: fund a channel
-
-        complete this function so that it:
-        - reverts if msg.sender already has a running channel (ie, if balances[msg.sender] != 0)
-        - updates the balances mapping with the eth received in the function call
-        - emits an Opened event
-        */
+        if (balances[msg.sender] > 0) revert Streamer__AlreadyFunded();
+        balances[msg.sender] = msg.value;
+        emit Opened(msg.sender, msg.value);
     }
 
     function timeLeft(address channel) public view returns (uint256) {
