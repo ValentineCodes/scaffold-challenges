@@ -5,7 +5,7 @@ import { Alert, Button, Card, Checkbox, Col, Menu, Row, List, Space, Spin } from
 import "antd/dist/antd.css";
 import React, { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Link, Route, Switch } from "react-router-dom";
-import Web3Modal from "web3modal";
+import Web3Modal, { local } from "web3modal";
 import "./App.css";
 import { Account, Address, Balance, Contract, Faucet, GasGauge, Header, Ramp, ThemeSwitch } from "./components";
 import { INFURA_ID, NETWORK, NETWORKS } from "./constants";
@@ -52,7 +52,7 @@ const { ethers } = require("ethers");
 */
 
 /// 📡 What chain are your contracts deployed to?
-const targetNetwork = NETWORKS.localhost; // <------- select your target frontend network (localhost, rinkeby, xdai, mainnet)
+const targetNetwork = NETWORKS.sepolia; // <------- select your target frontend network (localhost, rinkeby, xdai, mainnet)
 
 // 😬 Sorry for all the console logging
 const DEBUG = true;
@@ -169,7 +169,7 @@ const web3Modal = new Web3Modal({
  * let the application pay for your received wisdom automatically.
  * if false, the client will have to manually trigger each payment.
  */
-let autoPay = true;
+let autoPay = false;
 
 function App(props) {
   const mainnetProvider =
@@ -230,10 +230,12 @@ function App(props) {
   // Just plug in different 🛰 providers to get your balance on different chains:
   const yourMainnetBalance = useBalance(mainnetProvider, address);
 
+
   const contractConfig = useContractConfig();
 
   // Load in your local 📝 contract and read a value from it:
   const readContracts = useContractLoader(localProvider, contractConfig);
+
 
   // If you want to make 🔐 write transactions to your contracts, use the userSigner:
   const writeContracts = useContractLoader(userSigner, contractConfig, localChainId);
@@ -350,8 +352,12 @@ function App(props) {
 
     console.log("Received: %s", e.data);
     recievedWisdom = e.data;
-    document.getElementById("recievedWisdom-" + userAddress).innerText = recievedWisdom;
-
+    const receivedWisdom = document.getElementById("recievedWisdom-" + userAddress)
+    if(receivedWisdom) {
+      receivedWisdom.innerText = recievedWisdom;
+    }
+    
+console.log("AutoPay: ", autoPay)
     if (autoPay) {
       reimburseService(recievedWisdom);
     }
@@ -376,6 +382,7 @@ function App(props) {
    * @param {string} wisdom
    */
   async function reimburseService(wisdom) {
+    console.log("Reimbursing...", wisdom)
     const initialBalance = ethers.utils.parseEther("0.5");
     const costPerCharacter = ethers.utils.parseEther("0.001");
     const duePayment = costPerCharacter.mul(ethers.BigNumber.from(wisdom.length));
@@ -385,6 +392,8 @@ function App(props) {
     if (updatedBalance.lt(ethers.BigNumber.from(0))) {
       updatedBalance = ethers.BigNumber.from(0);
     }
+
+    console.log("updated balance: ", updatedBalance)
 
     const packed = ethers.utils.solidityPack(["uint256"], [updatedBalance]);
     const hashed = ethers.utils.keccak256(packed);
@@ -406,6 +415,8 @@ function App(props) {
     //    the fixed-length hash can be reused for any message format.
 
     const signature = await userSigner.signMessage(arrayified);
+
+    console.log("signature: ", signature)
 
     channel.postMessage({
       updatedBalance: updatedBalance.toHexString(),
@@ -462,6 +473,7 @@ function App(props) {
      * @param {MessageEvent<{updatedBalance: string, signature: string}>} voucher
      */
     function processVoucher(voucher) {
+      if(voucher.data === undefined) return
       // recreate a BigNumber object from the message. v.data.updatedBalance is
       // a string representation of the BigNumber for transit over the network
       const updatedBalance = ethers.BigNumber.from(voucher.data.updatedBalance);
@@ -476,6 +488,19 @@ function App(props) {
        *  `clientAddress`. (If it wasn't, log some error message and return).
       */
 
+      console.log("processing voucher...")
+
+      const packed = ethers.utils.solidityPack(["uint256"], [updatedBalance])
+      const hashed = ethers.utils.keccak256(packed)
+      const arrayified = ethers.utils.arrayify(hashed)
+
+      const signer = ethers.utils.verifyMessage(arrayified, voucher.data.signature)
+
+      if(signer !== clientAddress) {
+        console.log(`Expected signer ${signer} to be ${clientAddress}`)
+        return
+      }
+
       const existingVoucher = vouchers()[clientAddress];
 
       // update our stored voucher if this new one is more valuable
@@ -483,7 +508,7 @@ function App(props) {
         vouchers()[clientAddress] = voucher.data;
         vouchers()[clientAddress].updatedBalance = updatedBalance;
         updateClaimable(clientAddress);
-        // logVouchers();
+        logVouchers();
       }
     }
   }
@@ -500,7 +525,10 @@ function App(props) {
     const updated = vouchers()[clientAddress].updatedBalance;
 
     const claimable = init.sub(updated);
-    document.getElementById(`claimable-${clientAddress}`).innerText = ethers.utils.formatEther(claimable);
+
+    const _claimable = document.getElementById(`claimable-${clientAddress}`)
+    if(_claimable)
+    _claimable.innerText = ethers.utils.formatEther(claimable);
   }
 
   /**
@@ -522,6 +550,23 @@ function App(props) {
     channels[address] = window.clientChannels[address];
   }
 
+function canProvideService(clientAddress, wisdom) {
+  console.log(clientAddress)
+console.log("voucher: ", vouchers())
+  if(wisdom.length <= 10) return true;
+  if(vouchers()[clientAddress] === undefined) return false
+
+      const initBalance = ethers.utils.parseEther("0.5")
+      const costPerChar = ethers.utils.parseEther("0.001");
+      const updatedBalance = vouchers()[clientAddress].updatedBalance;
+      const duePayment = costPerChar.mul(ethers.BigNumber.from(wisdom.length))
+      const amountPaid = initBalance.sub(updatedBalance)
+      const amountOwed = duePayment.sub(amountPaid)
+      const maxDebt = costPerChar.mul(ethers.BigNumber.from(10))
+
+    return amountOwed.lt(maxDebt)
+}
+
   /**
    * sends the provided wisdom across the application channel
    * with user at `clientAddress`.
@@ -529,11 +574,17 @@ function App(props) {
    */
   function provideService(clientAddress) {
     const channelInput = document.getElementById("input-" + clientAddress);
-    if (channelInput) {
+    const wisdomProvided = document.getElementById(`provided-${clientAddress}`)
+  
+    if (channelInput && wisdomProvided) {
       const wisdom = channelInput.value;
-      // console.log("sending: %s", wisdom);
-      channels[clientAddress].postMessage(wisdom);
-      document.getElementById(`provided-${clientAddress}`).innerText = wisdom.length;
+
+      if(canProvideService(clientAddress, wisdom)) {
+        channels[clientAddress].postMessage(wisdom);
+        wisdomProvided.innerText = wisdom.length;
+      } else {
+        alert("Stop! High Discrepency.")
+      }
     } else {
       console.warn(`Failed to get ChannelInput. Found: ${channelInput}`);
     }
@@ -800,7 +851,7 @@ function App(props) {
                         </div>
                       </Card>
 
-                      {/* Checkpoint 5:
+                      {/* Checkpoint 5: */}
                       <Button
                         style={{ margin: 5 }}
                         type="primary"
@@ -811,13 +862,13 @@ function App(props) {
                         }}
                       >
                         Cash out latest voucher
-                      </Button> */}
+                      </Button>
                     </List.Item>
                   )}
                 ></List>
                 <div style={{ padding: 8 }}>
                   <div>Total ETH locked:</div>
-                  {/* add contract balance */}
+                    {writeContracts && <Balance address={writeContracts.Streamer.address} provider={localProvider} />}
                 </div>
               </div>
             ) : (
@@ -838,6 +889,7 @@ function App(props) {
                             console.log("AutoPay: " + autoPay);
 
                             if (autoPay) {
+                             
                               const wisdom = document.getElementById(`recievedWisdom-${userAddress}`).innerText;
                               reimburseService(wisdom);
                             }
@@ -853,7 +905,7 @@ function App(props) {
                         </Card>
                       </Col>
 
-                      {/* Checkpoint 6: challenge & closure
+                      {/* Checkpoint 6: challenge & closure */}
 
                       <Col span={5}>
                         <Button
@@ -887,7 +939,7 @@ function App(props) {
                         >
                           Close and withdraw funds
                         </Button>
-                      </Col> */}
+                      </Col>
                     </Row>
                   </div>
                 ) : hasClosedChannel() ? (

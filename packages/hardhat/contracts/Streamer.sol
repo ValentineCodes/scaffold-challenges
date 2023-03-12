@@ -5,6 +5,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
 error Streamer__AlreadyFunded();
+error Streamer__NoOpenChannel();
+error Streamer__NoClosingChannel();
+error Streamer__ChannelStillOpen();
+error Streamer__NotEnoughEth();
+error Streamer__InsufficientBalance();
+error Streamer__FailedToTransferEth();
 
 contract Streamer is Ownable {
     event Opened(address, uint256);
@@ -17,7 +23,10 @@ contract Streamer is Ownable {
 
     function fundChannel() public payable {
         if (balances[msg.sender] > 0) revert Streamer__AlreadyFunded();
+        if (msg.value == 0) revert Streamer__NotEnoughEth();
+
         balances[msg.sender] = msg.value;
+
         emit Opened(msg.sender, msg.value);
     }
 
@@ -26,7 +35,7 @@ contract Streamer is Ownable {
         return canCloseAt[channel] - block.timestamp;
     }
 
-    function withdrawEarnings(Voucher calldata voucher) public {
+    function withdrawEarnings(Voucher calldata voucher) public onlyOwner {
         // like the off-chain code, signatures are applied to the hash of the data
         // instead of the raw data itself
         bytes32 hashed = keccak256(abi.encode(voucher.updatedBalance));
@@ -56,6 +65,28 @@ contract Streamer is Ownable {
             - adjust the channel balance, and pay the contract owner. (Get the owner address withthe `owner()` function)
             - emit the Withdrawn event
         */
+
+        address signer = ecrecover(
+            prefixedHashed,
+            voucher.sig.v,
+            voucher.sig.r,
+            voucher.sig.s
+        );
+
+        uint256 signerBalance = balances[signer];
+
+        if (signerBalance <= voucher.updatedBalance)
+            revert Streamer__InsufficientBalance();
+
+        uint256 payout = signerBalance - voucher.updatedBalance;
+
+        balances[signer] = voucher.updatedBalance;
+
+        (bool success, ) = owner().call{value: payout}("");
+
+        if (!success) revert Streamer__FailedToTransferEth();
+
+        emit Withdrawn(signer, payout);
     }
 
     /*
@@ -67,6 +98,14 @@ contract Streamer is Ownable {
     - emits a Challenged event
     */
 
+    function challengeChannel() public {
+        if (balances[msg.sender] == 0) revert Streamer__NoOpenChannel();
+
+        canCloseAt[msg.sender] = block.timestamp + 30 seconds;
+
+        emit Challenged(msg.sender);
+    }
+
     /*
     Checkpoint 6b: Close the channel
 
@@ -76,6 +115,20 @@ contract Streamer is Ownable {
     - sends the channel's remaining funds to msg.sender, and sets the balance to 0
     - emits the Closed event
     */
+
+    function defundChannel() public {
+        uint256 deadline = canCloseAt[msg.sender];
+        if (deadline == 0) revert Streamer__NoClosingChannel();
+        if (deadline > block.timestamp) revert Streamer__ChannelStillOpen();
+
+        uint256 balance = balances[msg.sender];
+        balances[msg.sender] = 0;
+
+        (bool success, ) = msg.sender.call{value: balance}("");
+        if (!success) revert Streamer__FailedToTransferEth();
+
+        emit Closed(msg.sender);
+    }
 
     struct Voucher {
         uint256 updatedBalance;
