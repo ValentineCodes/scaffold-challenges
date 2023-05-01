@@ -14,8 +14,12 @@ const main = async () => {
 
   const MetaMultiSigWallet = await deploy("MetaMultiSigWallet", [
     31337,
-    ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
-    1,
+    [
+      "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      "0x97843608a00e2bbc75ab0C1911387E002565DEDE",
+    ],
+    2,
   ]);
 
   //const yourContract = await deploy("YourContract") // <-- add in constructor args like line 19 vvvv
