@@ -47,10 +47,10 @@ import { CreateTransaction, Transactions, Owners, FrontPage } from "./views";
 */
 
 /// 📡 What chain are your contracts deployed to?
-const targetNetwork = NETWORKS["localhost"]; // <------- select your target frontend network (localhost, rinkeby, xdai, mainnet)
+const targetNetwork = NETWORKS["sepolia"]; // <------- select your target frontend network (localhost, rinkeby, xdai, mainnet)
 
-// const poolServerUrl = "https://backend.multisig.holdings:49832/";
-const poolServerUrl = "http://localhost:49832/";
+const poolServerUrl = "https://backend.multisig.holdings:49832/";
+// const poolServerUrl = "http://localhost:49832/";
 
 // 😬 Sorry for all the console logging
 const DEBUG = true;
@@ -108,7 +108,7 @@ function App(props) {
   const yourMainnetBalance = useBalance(mainnetProvider, address);
 
   // Load in your local 📝 contract and read a value from it:
-  const readContracts = useContractLoader(localProvider);
+  const readContracts = useContractLoader(userProvider);
 
   // If you want to make 🔐 write transactions to your contracts, use the userProvider:
   const writeContracts = useContractLoader(userProvider);
